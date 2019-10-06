@@ -28,13 +28,21 @@ macro_rules! prv_key_from_json_str {
     ($e:expr) => (serde_json::from_str::<Curve25519PrvKey>($e).map(|k| SecretKey::from(OkpPrvKey(k))));
 }
 
+#[macro_export]
+macro_rules! prv_key_into_json_value {
+    ($e:expr) => (serde_json::to_value(Curve25519PrvKey::from(OkpPrvKey::from($e))));
+}
+
+#[macro_export]
+macro_rules! pub_key_into_json_value {
+    ($e:expr) => (serde_json::to_value(Curve25519PubKey::from(OkpPubKey::from($e))));
+}
 
 impl From<OkpPrvKey> for Curve25519PrvKey {
     fn from(prv_key:OkpPrvKey) -> Self {
         prv_key.0
     }
 }
-
 
 impl From<Curve25519PrvKey> for OkpPrvKey {
     fn from(prv_key:Curve25519PrvKey) -> Self {
@@ -80,7 +88,6 @@ impl From<OkpPrvKey> for SecretKey {
         SecretKey(b)
     }
 }
-
 
 impl From<Curve25519PubKey> for OkpPubKey {
     fn from(pub_key:Curve25519PubKey) -> Self {
@@ -152,7 +159,7 @@ mod tests {
 
 
     #[test]
-    fn convert_to_sodiumoxide_works() {
+    fn prv_convert_to_sodiumoxide_works() {
         let prv_res = prv_key_from_json_str!(PRV_KEY_EXAMPLE);
 
         assert!(prv_res.is_ok());
@@ -162,7 +169,10 @@ mod tests {
         for (l,r) in sk.0.iter().zip(ED25519_PRV_KEY_EXAMPLE.iter()) {
             assert_eq!(l,r);
         }
+    }
 
+    #[test]
+    fn pub_convert_to_sodiumoxide_works() {
         let pub_res = pub_key_from_json_str!(PUB_KEY_EXAMPLE);
 
         assert!(pub_res.is_ok());
@@ -175,31 +185,41 @@ mod tests {
     }
 
     #[test]
-    fn convert_from_sodiumoxide_works() {
-        let prv_res = prv_key_from_json_str!(PRV_KEY_EXAMPLE);
-        assert!(prv_res.is_ok());
-        let prv = prv_res.unwrap();
-        let prv2:OkpPrvKey = prv.into();
-        let prv3:Curve25519PrvKey = prv2.into();
-        let parsed_and_converted_json_val_res = serde_json::to_value(prv3);
+    fn prv_convert_from_sodiumoxide_works() {
+        let converted_json_val =
+            prv_key_from_json_str!(PRV_KEY_EXAMPLE).and_then(|sk| prv_key_into_json_value!(sk)).unwrap();
 
-        assert!(parsed_and_converted_json_val_res.is_ok());
-
-        let parsed_and_converted_json_val = parsed_and_converted_json_val_res.unwrap();
-
-        let expected_json_val_res =
-            serde_json::from_str::<Value>(PRV_KEY_EXAMPLE);
-
-        assert!(expected_json_val_res.is_ok());
-
-        let expected_json_val = expected_json_val_res.unwrap();
+        let expected_json_val =
+            serde_json::from_str::<Value>(PRV_KEY_EXAMPLE).unwrap();
 
         let mut parsed = [0u8;32];
-        json_digest::sha256::json_digest(&mut parsed, &parsed_and_converted_json_val);
+        json_digest::sha256::json_digest(&mut parsed, &converted_json_val);
 
         let mut expected = [0u8;32];
         json_digest::sha256::json_digest(&mut expected, &expected_json_val);
 
         assert_eq!(parsed, expected);
+
+    }
+
+    #[test]
+    fn pub_convert_from_sodiumoxide_works() {
+        let converted_json_val =
+            pub_key_from_json_str!(PUB_KEY_EXAMPLE).and_then(|pk| {println!("parse => {:?}",pk); pub_key_into_json_value!(pk)}).unwrap();
+
+        let expected_json_val =
+            serde_json::from_str::<Value>(PUB_KEY_EXAMPLE).unwrap();
+
+        println!("converted   => {:?}", converted_json_val);
+        println!("expected => {:?}", expected_json_val);
+
+        let mut parsed = [0u8;32];
+        json_digest::sha256::json_digest(&mut parsed, &converted_json_val);
+
+        let mut expected = [0u8;32];
+        json_digest::sha256::json_digest(&mut expected, &expected_json_val);
+
+        assert_eq!(parsed, expected);
+
     }
 }

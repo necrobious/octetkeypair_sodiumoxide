@@ -7,7 +7,7 @@ description = "Mappings to and from RFC8037 Ed25519 key bindings into sodiumoxid
 
 [dependencies]
 sodiumoxide  = "0.2.4"
-octetkeypair = { git = "https://github.com/necrobious/octetkeypair", rev = "ccfda39"  }
+octetkeypair = { git = "https://github.com/necrobious/octetkeypair", rev = "f899280"  }
 
 serde        = "1.0"
 serde_json   = "1.0"
