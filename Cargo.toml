@@ -1,0 +1,16 @@
+[package]
+name = "octetkeypair_sodiumoxide"
+version = "0.1.0"
+authors = ["Kirk Peterson <necrobious@gmail.com>"]
+edition = "2018"
+description = "Mappings to and from RFC8037 Ed25519 key bindings into sodiumoxide Ed25519 key types"
+
+[dependencies]
+sodiumoxide  = "0.2.4"
+octetkeypair = { git = "https://github.com/necrobious/octetkeypair", rev = "ccfda39"  }
+
+serde        = "1.0"
+serde_json   = "1.0"
+
+[dev-dependencies]
+json_digest = { git = "https://github.com/necrobious/json_digest", rev = "2475686"  }
