@@ -1,5 +1,5 @@
 use std::convert::From;
-
+use std::io::Read;
 use octetkeypair::{PublicBytes, PrivateBytes, Curve25519PubKey, Curve25519PrvKey};
 use sodiumoxide::crypto::sign::ed25519::{PublicKey,SecretKey};
 
@@ -7,6 +7,15 @@ pub struct OkpPubKey(pub Curve25519PubKey);
 pub struct OkpPrvKey(pub Curve25519PrvKey);
 
 
+#[macro_export]
+macro_rules! c25519_pub_key {
+    ($e:expr) => (Curve25519PubKey::from(OkpPubKey::from($e)));
+}
+
+#[macro_export]
+macro_rules! c25519_prv_key {
+    ($e:expr) => (Curve25519PrvKey::from(OkpPrvKey::from($e)));
+}
 
 #[macro_export]
 macro_rules! pub_key {
@@ -14,29 +23,10 @@ macro_rules! pub_key {
 }
 
 #[macro_export]
-macro_rules! pub_key_from_json_str {
-    ($e:expr) => (serde_json::from_str::<Curve25519PubKey>($e).map(|k| PublicKey::from(OkpPubKey(k))));
-}
-
-#[macro_export]
 macro_rules! prv_key {
     ($e:expr) => (SecretKey::from(OkpPrvKey($e)));
 }
 
-#[macro_export]
-macro_rules! prv_key_from_json_str {
-    ($e:expr) => (serde_json::from_str::<Curve25519PrvKey>($e).map(|k| SecretKey::from(OkpPrvKey(k))));
-}
-
-#[macro_export]
-macro_rules! prv_key_into_json_value {
-    ($e:expr) => (serde_json::to_value(Curve25519PrvKey::from(OkpPrvKey::from($e))));
-}
-
-#[macro_export]
-macro_rules! pub_key_into_json_value {
-    ($e:expr) => (serde_json::to_value(Curve25519PubKey::from(OkpPubKey::from($e))));
-}
 
 impl From<OkpPrvKey> for Curve25519PrvKey {
     fn from(prv_key:OkpPrvKey) -> Self {
@@ -113,13 +103,49 @@ impl From<OkpPubKey> for PublicKey {
     }
 }
 
+pub fn pub_keys_from_json_slice <'a> (v: &'a [u8]) -> Result<Vec<PublicKey>, serde_json::error::Error> {
+    serde_json::from_slice::<Vec<Curve25519PubKey>>(v)
+            .map(|ks|
+                ks.iter()
+                .map(|k| pub_key!(k.clone()))
+                .collect::<Vec<PublicKey>>()
+            )
+}
+
+pub fn pub_keys_from_json_reader <R> (rdr: R) -> Result<Vec<PublicKey>, serde_json::error::Error>
+where R: Read {
+    serde_json::from_reader::<R, Vec<Curve25519PubKey>>(rdr)
+            .map(|ks|
+                ks.iter()
+                .map(|k| pub_key!(k.clone()))
+                .collect::<Vec<PublicKey>>()
+            )
+}
+
+pub fn pub_keys_from_json_str <'a> (s: &'a str) -> Result<Vec<PublicKey>, serde_json::error::Error> {
+    serde_json::from_str::<Vec<Curve25519PubKey>>(s)
+            .map(|ks|
+                ks.iter()
+                .map(|k| pub_key!(k.clone()))
+                .collect::<Vec<PublicKey>>()
+            )
+}
+
+pub fn pub_key_from_json_str <'a> (s: &'a str) -> Result<PublicKey, serde_json::error::Error> {
+    serde_json::from_str::<Curve25519PubKey>(s).map(|k| pub_key!(k))
+}
+
+pub fn prv_key_from_json_str <'a> (s: &'a str) -> Result<SecretKey, serde_json::error::Error> {
+    serde_json::from_str::<Curve25519PrvKey>(s).map(|k| prv_key!(k))
+}
+
 #[cfg(test)]
 mod tests {
     use octetkeypair::{Curve25519PubKey, Curve25519PrvKey};
-    use sodiumoxide::crypto::sign::ed25519::{PublicKey,SecretKey};
     use crate::*;
     use serde_json::Value;
     use json_digest;
+    use std::io::BufReader;
 
     const PRV_KEY_EXAMPLE: &'static str = r###"
 {
@@ -129,6 +155,7 @@ mod tests {
     "x":"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"
 
 }
+
 "###;
     const PUB_KEY_EXAMPLE: &'static str = r###"
 {
@@ -137,6 +164,15 @@ mod tests {
     "x":"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"
 }
 "###;
+
+    const PUB_KEYS_EXAMPLE: &'static str = r###"
+[{
+    "kty":"OKP",
+    "crv":"Ed25519",
+    "x":"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"
+}]
+"###;
+
 
 
     const ED25519_PRV_KEY_EXAMPLE: [u8;64] =  [
@@ -160,7 +196,7 @@ mod tests {
 
     #[test]
     fn prv_convert_to_sodiumoxide_works() {
-        let prv_res = prv_key_from_json_str!(PRV_KEY_EXAMPLE);
+        let prv_res = prv_key_from_json_str(PRV_KEY_EXAMPLE);
 
         assert!(prv_res.is_ok());
 
@@ -173,7 +209,7 @@ mod tests {
 
     #[test]
     fn pub_convert_to_sodiumoxide_works() {
-        let pub_res = pub_key_from_json_str!(PUB_KEY_EXAMPLE);
+        let pub_res = pub_key_from_json_str(PUB_KEY_EXAMPLE);
 
         assert!(pub_res.is_ok());
 
@@ -185,9 +221,60 @@ mod tests {
     }
 
     #[test]
+    fn pub_keys_from_slice_convert_to_sodiumoxide_works() {
+        let pub_res = pub_keys_from_json_reader(PUB_KEYS_EXAMPLE.as_bytes());
+
+        assert!(pub_res.is_ok());
+
+        let pks = pub_res.unwrap();
+
+        assert_eq!(pks.len(), 1);
+
+        let pk = pks[0];
+
+        for (l,r) in pk.0.iter().zip(ED25519_PUB_KEY_EXAMPLE.iter()) {
+            assert_eq!(l,r);
+        }
+    }
+
+    #[test]
+    fn pub_keys_from_reader_convert_to_sodiumoxide_works() {
+        let pub_res = pub_keys_from_json_reader(BufReader::new(PUB_KEYS_EXAMPLE.as_bytes()));
+
+        assert!(pub_res.is_ok());
+
+        let pks = pub_res.unwrap();
+
+        assert_eq!(pks.len(), 1);
+
+        let pk = pks[0];
+
+        for (l,r) in pk.0.iter().zip(ED25519_PUB_KEY_EXAMPLE.iter()) {
+            assert_eq!(l,r);
+        }
+    }
+
+    #[test]
+    fn pub_keys_from_str_convert_to_sodiumoxide_works() {
+        let pub_res = pub_keys_from_json_str(PUB_KEYS_EXAMPLE);
+
+        assert!(pub_res.is_ok());
+
+        let pks = pub_res.unwrap();
+
+        assert_eq!(pks.len(), 1);
+
+        let pk = pks[0];
+
+        for (l,r) in pk.0.iter().zip(ED25519_PUB_KEY_EXAMPLE.iter()) {
+            assert_eq!(l,r);
+        }
+    }
+
+    #[test]
     fn prv_convert_from_sodiumoxide_works() {
         let converted_json_val =
-            prv_key_from_json_str!(PRV_KEY_EXAMPLE).and_then(|sk| prv_key_into_json_value!(sk)).unwrap();
+            prv_key_from_json_str(PRV_KEY_EXAMPLE).and_then(|sk| serde_json::to_value(c25519_prv_key!(sk))).unwrap();
 
         let expected_json_val =
             serde_json::from_str::<Value>(PRV_KEY_EXAMPLE).unwrap();
@@ -205,13 +292,10 @@ mod tests {
     #[test]
     fn pub_convert_from_sodiumoxide_works() {
         let converted_json_val =
-            pub_key_from_json_str!(PUB_KEY_EXAMPLE).and_then(|pk| {println!("parse => {:?}",pk); pub_key_into_json_value!(pk)}).unwrap();
+            pub_key_from_json_str(PUB_KEY_EXAMPLE).and_then(|pk| {serde_json::to_value(c25519_pub_key!(pk))}).unwrap();
 
         let expected_json_val =
             serde_json::from_str::<Value>(PUB_KEY_EXAMPLE).unwrap();
-
-        println!("converted   => {:?}", converted_json_val);
-        println!("expected => {:?}", expected_json_val);
 
         let mut parsed = [0u8;32];
         json_digest::sha256::json_digest(&mut parsed, &converted_json_val);
